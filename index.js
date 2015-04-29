@@ -459,7 +459,7 @@ module.exports = (function () {
                 console.log('Executing CREATE query: ' + insertQuery);
             }
             
-            execQuery(connections[connectionName], insertQuery, bindOutParam, function (err, result) {console.log('-AutoInc',result.returnParam);
+            execQuery(connections[connectionName], insertQuery, bindOutParam, function (err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log("#Error executing CREATE " + err.toString() + ".");
