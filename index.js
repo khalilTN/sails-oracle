@@ -128,10 +128,13 @@ module.exports = (function() {
 
         // Optional hook fired when a model is unregistered, typically at server halt
         // useful for tearing down remaining open connections, etc.
-        teardown: function(connectionName, cb) {
-            if (typeof connectionName == 'function') {
+        teardown: function(connectionName, collectionName, cb) {
+            if (typeof connectionName === 'function') {
                 cb = connectionName;
                 connectionName = null;
+            }else if (typeof collectionName === 'function') {
+                cb = collectionName;
+                collectionName = null;
             }
             if (!connectionName) {
                 _.keys(connections).forEach(function(connectionName) {
