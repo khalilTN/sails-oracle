@@ -469,7 +469,11 @@ module.exports = (function () {
             if (LOG_QUERIES) {
                 console.log('Executing CREATE query: ' + insertQuery);
             }
+<<<<<<< HEAD
 
+=======
+            
+>>>>>>> 434aa0944075993d6d1634a7c28482dc0196dd9f
             execQuery(connections[connectionName], insertQuery, bindOutParam, function (err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
