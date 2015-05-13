@@ -1,6 +1,6 @@
 {
   "name": "sails-oracledb",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Oracle Database adapter for Sails.js",
   "main": "index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
-    "oracle": "0.3.7",
+    "oracle": "https://github.com/khalilTN/node-oracle.git",
     "asynk": ">=0.0.3",
     "underscore": "~1.4.3",
     "underscore.string": "~2.3.1",
