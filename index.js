@@ -1,6 +1,6 @@
 var asynk = require('asynk');
 var _ = require('underscore');
-var oracle = require('node-oracle');
+var oracle = require('oracle');
 var sql = require('./lib/sql.js');
 var Query = require('./lib/query');
 var utils = require('./utils');
