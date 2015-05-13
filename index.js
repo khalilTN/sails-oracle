@@ -15,7 +15,7 @@ var Pool = require('generic-pool');
 var LOG_QUERIES = true;
 var LOG_ERRORS = true;
 
-module.exports = (function () {
+module.exports = (function() {
 
 
     //var dbs = {};
@@ -38,7 +38,7 @@ module.exports = (function () {
 
     var adapter = {
         autoIncrements: [],
-        autoIncNextval: function (tableName, columnName) {
+        autoIncNextval: function(tableName, columnName) {
             this.autoIncrements[tableName] = this.autoIncrements[tableName] || [];
             this.autoIncrements[tableName][columnName] = this.autoIncrements[tableName][columnName] || 1;
             var nextval = this.autoIncrements[tableName][columnName] + 1;
@@ -81,18 +81,17 @@ module.exports = (function () {
             // safe   => Don't change anything (good for production DBs)
             migrate: 'safe'
         },
-        config: {
-        },
+        config: {},
         //added to match waterline orm
-        registerConnection: function (connection, collections, cb) {
+        registerConnection: function(connection, collections, cb) {
             if (!connection.identity)
                 return cb("Errors.IdentityMissing");
             if (connections[connection.identity])
                 return cb("Errors.IdentityDuplicate");
             var pool = Pool.Pool({
                 name: connection.identity,
-                create: function (callback) {
-                    oracle.connect(marshalConfig(connection), function (err, cnx) {
+                create: function(callback) {
+                    oracle.connect(marshalConfig(connection), function(err, cnx) {
                         if (err) {
                             console.log(err);
                             return callback(err, null);
@@ -105,7 +104,7 @@ module.exports = (function () {
                         asynk.each(queries, (cnx.execute).bind(cnx)).args(asynk.item, [], asynk.callback).serie(callback, [null, cnx]);
                     });
                 },
-                destroy: function (cnx) {
+                destroy: function(cnx) {
                     cnx.close();
                 },
                 min: 15,
@@ -129,19 +128,19 @@ module.exports = (function () {
 
         // Optional hook fired when a model is unregistered, typically at server halt
         // useful for tearing down remaining open connections, etc.
-        teardown: function (connectionName, cb) {
+        teardown: function(connectionName, cb) {
             if (typeof connectionName == 'function') {
                 cb = connectionName;
                 connectionName = null;
             }
-            if(!connectionName){
-                _.keys(connections).forEach(function(connectionName){
+            if (!connectionName) {
+                _.keys(connections).forEach(function(connectionName) {
                     closeConnectionPool(connectionName);
                 });
                 connections = {};
                 return cb();
             }
-            if(!connections[connectionName]) return cb();
+            if (!connections[connectionName]) return cb();
             /*var pool = connections[connectionName].connection;
             pool.drain(function () {
                 pool.destroyAllNow();
@@ -151,7 +150,7 @@ module.exports = (function () {
             return cb();
         },
         // REQUIRED method if integrating with a schemaful database
-        define: function (connectionName, collectionName, definition, cb, connection) {
+        define: function(connectionName, collectionName, definition, cb, connection) {
 
             // Define a new "table" or "collection" schema in the data store
             var self = this;
@@ -190,7 +189,7 @@ module.exports = (function () {
                     }
                     return cb(err);
                 }
-                var autoIncColumn = _.find(_.keys(definition), function (columnName) {
+                var autoIncColumn = _.find(_.keys(definition), function(columnName) {
                     return !_.isUndefined(definition[columnName].autoIncrement) && definition[columnName].autoIncrement && definition[columnName].primaryKey;
                 });
                 // creation des sequence pour les champs autoIncrement
@@ -201,37 +200,37 @@ module.exports = (function () {
                     if (LOG_QUERIES) {
                         console.log('Executing DEFINE Sequence Test query: ', testSequenceQuery);
                     }
-                    execQuery(connections[connectionName], testSequenceQuery, [], function (err, result) {
+                    execQuery(connections[connectionName], testSequenceQuery, [], function(err, result) {
                         if (err) {
                             if (LOG_ERRORS) {
                                 console.log("could not get last autoIncrement value: ", err);
                             }
                             return cb(err);
                         }
-                        if (result.length === 0) {/* Sequence Does Not Exist */
+                        if (result.length === 0) { /* Sequence Does Not Exist */
                             var createSequenceQuery = 'create sequence ' + sequenceName + ' start with 1 increment by 1 maxvalue 999999999999';
                             if (LOG_QUERIES) {
                                 console.log('Executing DEFINE Sequence Creation query: ', createSequenceQuery);
                             }
-                            execQuery(connections[connectionName], createSequenceQuery, [], function (err, result) {
+                            execQuery(connections[connectionName], createSequenceQuery, [], function(err, result) {
                                 if (err) {
                                     if (LOG_ERRORS) {
                                         console.log("could not create sequence :", sequenceName, 'cause :', err);
                                     }
                                     return cb(err);
                                 }
-                                self.describe(connectionName, collectionName, function (err) {
+                                self.describe(connectionName, collectionName, function(err) {
                                     cb(err, result);
                                 });
                             });
                         } else {
-                            self.describe(connectionName, collectionName, function (err) {
+                            self.describe(connectionName, collectionName, function(err) {
                                 cb(err, result);
                             });
                         }
                     });
                 } else {
-                    self.describe(connectionName, collectionName, function (err) {
+                    self.describe(connectionName, collectionName, function(err) {
                         cb(err, result);
                     });
                 }
@@ -251,7 +250,7 @@ module.exports = (function () {
          var attributes = {};
          cb(null, attributes);
          },*/
-        describe: function (connectionName, collectionName, cb, connection) {
+        describe: function(connectionName, collectionName, cb, connection) {
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
 
@@ -264,12 +263,9 @@ module.exports = (function () {
             var queries = [];
             queries[0] = "SELECT COLUMN_NAME, DATA_TYPE, NULLABLE FROM USER_TAB_COLUMNS WHERE TABLE_NAME = '" + tableName + "'";
             queries[1] = "SELECT index_name,COLUMN_NAME FROM user_ind_columns WHERE table_name = '" + tableName + "'";
-            queries[2] = "SELECT cols.table_name, cols.column_name, cols.position, cons.status, cons.owner "
-                    + "FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '" + tableName
-                    + "' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = cols.owner "
-                    + "ORDER BY cols.table_name, cols.position";
+            queries[2] = "SELECT cols.table_name, cols.column_name, cols.position, cons.status, cons.owner " + "FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '" + tableName + "' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = cols.owner " + "ORDER BY cols.table_name, cols.position";
 
-            asynk.each(queries, execQuery).args(connectionObject, asynk.item, [], asynk.callback).parallel(function (err, results) {
+            asynk.each(queries, execQuery).args(connectionObject, asynk.item, [], asynk.callback).parallel(function(err, results) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log(err);
@@ -285,8 +281,8 @@ module.exports = (function () {
                 }
 
                 // Loop through Schema and attach extra attributes
-                schema.forEach(function (attribute) {
-                    tablePrimaryKeys.forEach(function (pk) {
+                schema.forEach(function(attribute) {
+                    tablePrimaryKeys.forEach(function(pk) {
                         // Set Primary Key Attribute
                         if (attribute.COLUMN_NAME === pk.COLUMN_NAME) {
                             attribute.primaryKey = true;
@@ -303,10 +299,9 @@ module.exports = (function () {
 
                 });
                 // Loop Through Indexes and Add Properties
-                indexes.forEach(function (index) {
-                    schema.forEach(function (attribute) {
-                        if (attribute.COLUMN_NAME === index.COLUMN_NAME)
-                        {
+                indexes.forEach(function(index) {
+                    schema.forEach(function(attribute) {
+                        if (attribute.COLUMN_NAME === index.COLUMN_NAME) {
                             attribute.indexed = true;
                         }
                     });
@@ -320,7 +315,7 @@ module.exports = (function () {
             }, [null, asynk.data('all')]);
         },
         // Direct access to query
-        query: function (connectionName, collectionName, query, data, cb, connection) {
+        query: function(connectionName, collectionName, query, data, cb, connection) {
 
             if (_.isFunction(data)) {
                 cb = data;
@@ -332,7 +327,7 @@ module.exports = (function () {
             }
             data = data || [];
             // Run query
-            execQuery(connections[connectionName], query, data, function (err, result) {
+            execQuery(connections[connectionName], query, data, function(err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log("#Error executing QUERY " + err.toString() + ".");
@@ -343,7 +338,7 @@ module.exports = (function () {
             });
         },
         // REQUIRED method if integrating with a schemaful database
-        drop: function (connectionName, collectionName, relations, cb, connection) {
+        drop: function(connectionName, collectionName, relations, cb, connection) {
             // Drop a "table" or "collection" schema from the data store
             var self = this;
 
@@ -381,7 +376,7 @@ module.exports = (function () {
                     next(null, result);
                 });
             }
-            asynk.each(relations, dropTable).args(asynk.item, asynk.callback).parallel(function (err) {
+            asynk.each(relations, dropTable).args(asynk.item, asynk.callback).parallel(function(err) {
                 if (err)
                     return cb(err);
                 dropTable(collectionName, cb);
@@ -398,7 +393,7 @@ module.exports = (function () {
 
 
         // REQUIRED method if users expect to call Model.create() or any methods
-        create: function (connectionName, collectionName, data, cb, connection) {
+        create: function(connectionName, collectionName, data, cb, connection) {
             var self = this;
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
@@ -406,9 +401,9 @@ module.exports = (function () {
 
             //var _insertData = lodash.cloneDeep(data);
             var _insertData = _.clone(data);
-            
+
             // Prepare values
-            Object.keys(data).forEach(function (value) {
+            Object.keys(data).forEach(function(value) {
                 data[value] = utils.prepareValue(data[value]);
             });
             //recherche des champs incrémentals et de type date et affectation des valeurs lues des séquences
@@ -417,7 +412,7 @@ module.exports = (function () {
             var autoIncPKval = null;
 
             var definition = collection.definition;
-            Object.keys(definition).forEach(function (columnName) {
+            Object.keys(definition).forEach(function(columnName) {
                 var column = definition[columnName];
 
                 if (fieldIsAutoIncrement(column)) {
@@ -432,8 +427,7 @@ module.exports = (function () {
                 //si le  champs est de type date time
                 if (fieldIsDatetime(column)) {
                     data[columnName] = _.isUndefined(data[columnName]) ? 'null' : SqlString.dateField(data[columnName]);
-                }
-                else if (fieldIsBoolean(column)) {
+                } else if (fieldIsBoolean(column)) {
                     data[columnName] = (data[columnName]) ? 1 : 0;
                 } else if (fieldIsBinary(column)) {
                     data[columnName] = SqlString.lobField(data[columnName]);
@@ -469,12 +463,8 @@ module.exports = (function () {
             if (LOG_QUERIES) {
                 console.log('Executing CREATE query: ' + insertQuery);
             }
-<<<<<<< HEAD
 
-=======
-            
->>>>>>> 434aa0944075993d6d1634a7c28482dc0196dd9f
-            execQuery(connections[connectionName], insertQuery, bindOutParam, function (err, result) {
+            execQuery(connections[connectionName], insertQuery, bindOutParam, function(err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log("#Error executing CREATE " + err.toString() + ".");
@@ -496,8 +486,7 @@ module.exports = (function () {
                         }
                     }
 
-                }
-                else {
+                } else {
                     autoIncData[pk] = data[pk];
                     var values = _.extend({}, _insertData, autoIncData);
                     curentCB[0] = cb;
@@ -514,7 +503,7 @@ module.exports = (function () {
         },
         // Override of createEach to share a single connection
         // instead of using a separate connection for each request
-        createEach: function (connectionName, collectionName, valuesList, cb, connection) {
+        createEach: function(connectionName, collectionName, valuesList, cb, connection) {
 
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
@@ -522,21 +511,22 @@ module.exports = (function () {
 
             var records = [];
 
-            asynk.each(valuesList, function (data, cb) {
+            asynk.each(valuesList, function(data, cb) {
 
                 // Prepare values
-                
-                
-                Object.keys(data).forEach(function (value) {
+
+
+                Object.keys(data).forEach(function(value) {
                     data[value] = utils.prepareValue(data[value]);
                 });
-                
+                /* In alter mode, waterline pass data to create each with attributes names and not columnName */
+                /* Line 529 -> 531 make us treat this with finding the attributeName */
                 var definition = collection.definition;
                 var attributes = collection.attributes;
-                Object.keys(definition).forEach(function (columnName) {
+                Object.keys(definition).forEach(function(columnName) {
                     var attribute = definition[columnName];
                     /* searching for attrbiute name */
-                    var attributeName = _.find(_.keys(attributes),function(attr){
+                    var attributeName = _.find(_.keys(attributes), function(attr) {
                         return attr === columnName || attributes[attr].columnName === columnName;
                     });
                     /* affecting values to add to the columns */
@@ -570,23 +560,23 @@ module.exports = (function () {
                 if (LOG_QUERIES) {
                     console.log('Executing CREATE_EACH : ' + _query.query);
                 }
-                execQuery(connections[connectionName], _query.query, [], function (err, results) {
+                execQuery(connections[connectionName], _query.query, [], function(err, results) {
                     if (err) {
                         if (LOG_ERRORS) {
-                            console.log("#Error executing Create (CreateEach) " + err.toString() + ".\nCause",_query.query);
+                            console.log("#Error executing Create (CreateEach) " + err.toString() + ".\nCause", _query.query);
                         }
                         return cb(handleQueryError(err));
                     }
                     records.push(results.insertId);
                     cb();
                 });
-            }).args(asynk.item, asynk.callback).parallel(function (err) {
+            }).args(asynk.item, asynk.callback).parallel(function(err) {
                 if (err)
                     return cb(err);
 
                 var pk = 'id';
 
-                Object.keys(collection.definition).forEach(function (key) {
+                Object.keys(collection.definition).forEach(function(key) {
                     if (!collection.definition[key].hasOwnProperty('primaryKey'))
                         return;
                     pk = key;
@@ -614,7 +604,7 @@ module.exports = (function () {
         // You're actually supporting find(), findAll(), and other methods here
         // but the core will take care of supporting all the different usages.
         // (e.g. if this is a find(), not a findAll(), it will only close back a single model)
-        find: function (connectionName, collectionName, options, cb, connection) {
+        find: function(connectionName, collectionName, options, cb, connection) {
             // Check if this is an aggregate query and that there is something to return
             if (options.groupBy || options.sum || options.average || options.min || options.max) {
                 if (!options.sum && !options.average && !options.min && !options.max) {
@@ -640,11 +630,11 @@ module.exports = (function () {
                 options.sort[PK] = 1;
             }
 
-            var jsonColumns = _.filter(_.keys(collection.attributes), function (attrName) {
+            var jsonColumns = _.filter(_.keys(collection.attributes), function(attrName) {
                 var type = collection.attributes[attrName].type || collection.attributes[attrName];
                 return type === 'json';
             });
-            jsonColumns = _.map(jsonColumns,function(col){
+            jsonColumns = _.map(jsonColumns, function(col) {
                 return collection.attributes[col].columnName || col;
             });
             var limit = options.limit || null;
@@ -663,11 +653,9 @@ module.exports = (function () {
 
             if (limit && skip) {
                 findQuery = 'SELECT * FROM (' + findQuery + ') WHERE LINE_NUMBER > ' + skip + ' and LINE_NUMBER <= ' + (skip + limit);
-            }
-            else if (limit) {
+            } else if (limit) {
                 findQuery = 'SELECT * FROM (' + findQuery + ') WHERE LINE_NUMBER <= ' + limit;
-            }
-            else if (skip) {
+            } else if (skip) {
                 findQuery = 'SELECT * FROM (' + findQuery + ') WHERE LINE_NUMBER > ' + skip;
             }
 
@@ -676,7 +664,7 @@ module.exports = (function () {
             if (LOG_QUERIES) {
                 console.log('Executing FIND query: ' + _query.query[0]);
             }
-            execQuery(connections[connectionName], findQuery, [], function (err, result) {
+            execQuery(connections[connectionName], findQuery, [], function(err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log('#Error executing Find ' + err.toString() + '.');
@@ -684,8 +672,8 @@ module.exports = (function () {
                     return cb(err);
                 }
                 if (jsonColumns && jsonColumns.length) {
-                    result = _.map(result, function (record) {
-                        jsonColumns.forEach(function (column) {
+                    result = _.map(result, function(record) {
+                        jsonColumns.forEach(function(column) {
                             if (record[column]) {
                                 record[column] = JSON.parse(record[column].replace(/\\/g, ''));
                             }
@@ -698,7 +686,7 @@ module.exports = (function () {
             });
         },
         // REQUIRED method if users expect to call Model.update()
-        update: function (connectionName, collectionName, options, values, cb, connection) {
+        update: function(connectionName, collectionName, options, values, cb, connection) {
             var processor = new Processor();
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
@@ -716,7 +704,7 @@ module.exports = (function () {
                 return cb(e);
             }
 
-            execQuery(connections[connectionName], _query.query[0], [], function (err, results) {
+            execQuery(connections[connectionName], _query.query[0], [], function(err, results) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log("#Error executing Find_1 (Update) " + err.toString() + ".");
@@ -726,7 +714,7 @@ module.exports = (function () {
                 var ids = [];
 
                 var pk = 'id';
-                Object.keys(collection.definition).forEach(function (key) {
+                Object.keys(collection.definition).forEach(function(key) {
                     if (!collection.definition[key].hasOwnProperty('primaryKey'))
                         return;
                     pk = key;
@@ -736,29 +724,30 @@ module.exports = (function () {
                     return cb(null, []);
                 }
 
-                results.forEach(function (result) {
+                results.forEach(function(result) {
                     //ids.push(result[pk.toUpperCase()]);
                     ids.push(result[pk]);
                 });
 
                 // Prepare values
-                Object.keys(values).forEach(function (value) {
+                Object.keys(values).forEach(function(value) {
                     values[value] = utils.prepareValue(values[value]);
                 });
 
                 var definition = collection.definition;
                 var attrs = collection.attributes;
 
-                Object.keys(definition).forEach(function (columnName) {
+                Object.keys(definition).forEach(function(columnName) {
                     var column = definition[columnName];
 
                     if (fieldIsDatetime(column)) {
                         if (!values[columnName])
                             return;
                         values[columnName] = SqlString.dateField(values[columnName]);
-                    }
-                    else if (fieldIsBoolean(column)) {
+                    } else if (fieldIsBoolean(column)) {
                         values[columnName] = (values[columnName]) ? 1 : 0;
+                    } else if (fieldIsBinary(column)) {
+                        values[columnName] = SqlString.lobField(values[columnName]);
                     }
                 });
                 // Build query
@@ -771,7 +760,7 @@ module.exports = (function () {
                     console.log('Executing UPDATE query: ' + _query.query);
                 }
                 // Run query
-                execQuery(connections[connectionName], _query.query, [], function (err, result) {
+                execQuery(connections[connectionName], _query.query, [], function(err, result) {
                     if (err) {
                         if (LOG_ERRORS) {
                             console.log('#Error executing Update ' + err.toString() + '.');
@@ -779,7 +768,9 @@ module.exports = (function () {
                         return cb(handleQueryError(err));
                     }
 
-                    var criteria = {where: {}};
+                    var criteria = {
+                        where: {}
+                    };
 
                     if (ids.length === 1) {
                         criteria.where[pk] = ids[0];
@@ -804,7 +795,7 @@ module.exports = (function () {
                     if (LOG_QUERIES) {
                         console.log("Executing UPDATE find query" + findQuery);
                     }
-                    execQuery(connections[connectionName], findQuery, [], function (err, result) {
+                    execQuery(connections[connectionName], findQuery, [], function(err, result) {
                         if (err) {
                             if (LOG_ERRORS) {
                                 console.log("#Error executing Find_2 (Update) " + err.toString() + ".");
@@ -820,7 +811,7 @@ module.exports = (function () {
             });
         },
         // REQUIRED method if users expect to call Model.destroy()
-        destroy: function (connectionName, collectionName, options, cb, connection) {
+        destroy: function(connectionName, collectionName, options, cb, connection) {
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
             var tableName = collectionName;
@@ -840,11 +831,11 @@ module.exports = (function () {
                 console.log("Executing DESTROY query: " + _query.query);
             }
             asynk.add((adapter.find).bind(adapter)).args(connectionName, collectionName, options, asynk.callback, connection).alias('findRecords')
-                    .add(execQuery).args(connections[connectionName], _query.query, [], asynk.callback)
-                    .serie(cb, [null, asynk.data('findRecords')]);
+                .add(execQuery).args(connections[connectionName], _query.query, [], asynk.callback)
+                .serie(cb, [null, asynk.data('findRecords')]);
         },
         // REQUIRED method if users expect to call Model.stream()
-        stream: function (connectionName, collectionName, options, stream, connection) {
+        stream: function(connectionName, collectionName, options, stream, connection) {
             if (_.isUndefined(connection)) {
                 return spawnConnection(__STREAM__, connections[connectionName]);
             } else {
@@ -864,31 +855,30 @@ module.exports = (function () {
                 var dbStream = connection.execute(query);
 
                 // Handle error, an 'end' event will be emitted after this as well
-                dbStream.on('error', function (err) {
+                dbStream.on('error', function(err) {
                     stream.end(err); // End stream
                     cb(err); // Close connection
                 });
 
                 // the field packets for the rows to follow
-                dbStream.on('fields', function (fields) {
-                });
+                dbStream.on('fields', function(fields) {});
 
                 // Pausing the connnection is useful if your processing involves I/O
-                dbStream.on('result', function (row) {
+                dbStream.on('result', function(row) {
                     connection.pause();
-                    stream.write(row, function () {
+                    stream.write(row, function() {
                         connection.resume();
                     });
                 });
 
                 // all rows have been received
-                dbStream.on('end', function () {
+                dbStream.on('end', function() {
                     stream.end(); // End stream
                     cb(); // Close connection
                 });
             }
         },
-        addAttribute: function (connectionName, collectionName, attrName, attrDef, cb, connection) {
+        addAttribute: function(connectionName, collectionName, attrName, attrDef, cb, connection) {
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
             var tableName = collectionName;
@@ -901,7 +891,7 @@ module.exports = (function () {
             }
 
             // Run query
-            execQuery(connections[connectionName], query, function (err, result) {
+            execQuery(connections[connectionName], query, function(err, result) {
                 if (err)
                     if (LOG_ERRORS) {
                         console.log('ADD_ATTRIBUTE error: ', err);
@@ -912,7 +902,7 @@ module.exports = (function () {
                 cb(err);
             });
         },
-        removeAttribute: function (connectionName, collectionName, attrName, cb, connection) {
+        removeAttribute: function(connectionName, collectionName, attrName, cb, connection) {
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
             var tableName = collectionName;
@@ -923,7 +913,7 @@ module.exports = (function () {
             if (LOG_QUERIES) {
                 console.log('Executing REMOVE_ATTRIBUTE query: ', query);
             }
-            execQuery(connections[connectionName], query, function (err, result) {
+            execQuery(connections[connectionName], query, function(err, result) {
                 if (err)
                     if (LOG_ERRORS) {
                         console.log('REMOVE_ATTRIBUTE error: ', err);
@@ -934,7 +924,7 @@ module.exports = (function () {
                 cb(err);
             });
         },
-        count: function (connectionName, collectionName, options, cb, connection) {
+        count: function(connectionName, collectionName, options, cb, connection) {
             // Check if this is an aggregate query and that there is something to return
             if (options.groupBy || options.sum || options.average || options.min || options.max) {
                 if (!options.sum && !options.average && !options.min && !options.max) {
@@ -947,7 +937,7 @@ module.exports = (function () {
             var tableName = collectionName;
 
             // Build a copy of the schema to send w/ the query
-            var localSchema = _.reduce(connectionObject.collections, function (localSchema, collection, cid) {
+            var localSchema = _.reduce(connectionObject.collections, function(localSchema, collection, cid) {
                 localSchema[cid] = collection.schema;
                 return localSchema;
             }, {});
@@ -959,7 +949,7 @@ module.exports = (function () {
             if (LOG_QUERIES) {
                 console.log('Executing COUNT query:', query);
             }
-            execQuery(connections[connectionName], query, [], function (err, result) {
+            execQuery(connections[connectionName], query, [], function(err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
                         console.log('#Error counting table \'' + collectionName + '\' rows (Count) ' + err.toString() + '.');
@@ -970,155 +960,158 @@ module.exports = (function () {
                 cb(null, result[0].COUNT);
             });
         },
-        join: function (connectionName, collectionName, options, cb, connection) {
-            // Populate associated records for each parent result
-            // (or do them all at once as an optimization, if possible)
-            Cursor({
-                instructions: options,
-                nativeJoins: true,
-                /**
-                 * Find some records directly (using only this adapter)
-                 * from the specified collection.
-                 *
-                 * @param  {String}   collectionName
-                 * @param  {Object}   criteria
-                 * @param  {Function} _cb
-                 */
-                $find: function (collectionName, criteria, _cb) {
-                    return adapter.find(connectionName, collectionName, criteria, _cb);
-                },
-                /**
-                 * Look up the name of the primary key field
-                 * for the collection with the specified identity.
-                 *
-                 * @param  {String}   collectionName
-                 * @return {String}
-                 */
-                $getPK: function (collectionName) {
-                    if (!collectionName)
-                        return;
-                    return _getPK(connectionName, collectionName);
-                },
-                /**
-                 * Given a strategy type, build up and execute a SQL query for it.
-                 *
-                 * @param {}
-                 */
+        join: function(connectionName, collectionName, options, cb, connection) {
+                // Populate associated records for each parent result
+                // (or do them all at once as an optimization, if possible)
+                Cursor({
+                    instructions: options,
+                    nativeJoins: true,
+                    /**
+                     * Find some records directly (using only this adapter)
+                     * from the specified collection.
+                     *
+                     * @param  {String}   collectionName
+                     * @param  {Object}   criteria
+                     * @param  {Function} _cb
+                     */
+                    $find: function(collectionName, criteria, _cb) {
+                        return adapter.find(connectionName, collectionName, criteria, _cb);
+                    },
+                    /**
+                     * Look up the name of the primary key field
+                     * for the collection with the specified identity.
+                     *
+                     * @param  {String}   collectionName
+                     * @return {String}
+                     */
+                    $getPK: function(collectionName) {
+                        if (!collectionName)
+                            return;
+                        return _getPK(connectionName, collectionName);
+                    },
+                    /**
+                     * Given a strategy type, build up and execute a SQL query for it.
+                     *
+                     * @param {}
+                     */
 
-                $populateBuffers: function populateBuffers(options, next) {
+                    $populateBuffers: function populateBuffers(options, next) {
 
-                    var buffers = options.buffers;
-                    var instructions = options.instructions;
+                        var buffers = options.buffers;
+                        var instructions = options.instructions;
 
-                    var mapping = [];
-                    var criterias = [];
-                    var i = 0;
-                    _.keys(instructions.instructions).forEach(function (attr) {
-                        var strategy = instructions.instructions[attr].strategy.strategy;
-                        var population = instructions.instructions[attr].instructions[0];
-                        mapping["p" + i] = population.parentKey;
-                        population.parentKeyAlias = "p" + i;
-                        i++;
-                        var childInstructions = instructions.instructions[attr].instructions;
-                        // reglage des limit et skip pour les childs
-                        var x = 0;
-                        childInstructions.forEach(function (childIns) {
-                            var criteria = childIns.criteria;
-                            if (criteria) {
-                                criterias[childIns.child] = {skip: (criteria.skip ? criteria.skip : null), limit: (criteria.limit ? criteria.limit : null)};
-                                delete criteria.skip;
-                                delete criteria.limit;
-                            }
-                            x++;
-                        });
-                    });
-
-
-                    // Grab the collection by looking into the connection
-                    var connectionObject = connections[connectionName];
-                    var collection = connectionObject.collections[collectionName];
-
-                    var parentRecords = [];
-                    var cachedChildren = {};
-
-                    // Grab Connection Schema
-                    var schema = {};
-
-                    Object.keys(connectionObject.collections).forEach(function (coll) {
-                        schema[coll] = connectionObject.collections[coll].schema;
-                    });
-                    var processor = new Processor();
-                    // Build Query
-                    var _schema = collection.waterline.schema;
-
-                    var sequel = new Sequel(_schema, sqlOptions);
-                    var _query;
-
-                    // Build a query for the specific query strategy
-                    try {
-                        _query = sequel.find(collectionName, instructions);
-                    } catch (e) {
-                        return next(e);
-                    }
-
-                    asynk.add(function (next) {
-                        adapter.find(connectionName, collectionName, instructions, function __FIND__(err, result) {
-                            if (err) {
-                                if (LOG_ERRORS) {
-                                    console.log('#Error fetching parent \'' + collectionName + '\' rows (Join) ' + err.toString() + '.');
+                        var mapping = [];
+                        var criterias = [];
+                        var i = 0;
+                        _.keys(instructions.instructions).forEach(function(attr) {
+                            var strategy = instructions.instructions[attr].strategy.strategy;
+                            var population = instructions.instructions[attr].instructions[0];
+                            mapping["p" + i] = population.parentKey;
+                            population.parentKeyAlias = "p" + i;
+                            i++;
+                            var childInstructions = instructions.instructions[attr].instructions;
+                            // reglage des limit et skip pour les childs
+                            var x = 0;
+                            childInstructions.forEach(function(childIns) {
+                                var criteria = childIns.criteria;
+                                if (criteria) {
+                                    criterias[childIns.child] = {
+                                        skip: (criteria.skip ? criteria.skip : null),
+                                        limit: (criteria.limit ? criteria.limit : null)
+                                    };
+                                    delete criteria.skip;
+                                    delete criteria.limit;
                                 }
-                                return next(err);
-                            }
-                            var attrs = collection.attributes;
-                            parentRecords = result;
+                                x++;
+                            });
+                        });
 
-                            var splitChildren = function (parent, next) {
-                                var cache = {};
 
-                                _.keys(parent).forEach(function (key) {
-                                    // Check if we can split this on our special alias identifier '___' and if
-                                    // so put the result in the cache
-                                    var split = key.split('___');
-                                    var originalParentKey = mapping[split[0]];
-                                    if (split.length < 2)
-                                        return;
-                                    if (!hop(cache, originalParentKey))
-                                        cache[originalParentKey] = {};
-                                    cache[originalParentKey][split[1]] = parent[key];
-                                    delete parent[key];
+                        // Grab the collection by looking into the connection
+                        var connectionObject = connections[connectionName];
+                        var collection = connectionObject.collections[collectionName];
+
+                        var parentRecords = [];
+                        var cachedChildren = {};
+
+                        // Grab Connection Schema
+                        var schema = {};
+
+                        Object.keys(connectionObject.collections).forEach(function(coll) {
+                            schema[coll] = connectionObject.collections[coll].schema;
+                        });
+                        var processor = new Processor();
+                        // Build Query
+                        var _schema = collection.waterline.schema;
+
+                        var sequel = new Sequel(_schema, sqlOptions);
+                        var _query;
+
+                        // Build a query for the specific query strategy
+                        try {
+                            _query = sequel.find(collectionName, instructions);
+                        } catch (e) {
+                            return next(e);
+                        }
+
+                        asynk.add(function(next) {
+                                adapter.find(connectionName, collectionName, instructions, function __FIND__(err, result) {
+                                    if (err) {
+                                        if (LOG_ERRORS) {
+                                            console.log('#Error fetching parent \'' + collectionName + '\' rows (Join) ' + err.toString() + '.');
+                                        }
+                                        return next(err);
+                                    }
+                                    var attrs = collection.attributes;
+                                    parentRecords = result;
+
+                                    var splitChildren = function(parent, next) {
+                                        var cache = {};
+
+                                        _.keys(parent).forEach(function(key) {
+                                            // Check if we can split this on our special alias identifier '___' and if
+                                            // so put the result in the cache
+                                            var split = key.split('___');
+                                            var originalParentKey = mapping[split[0]];
+                                            if (split.length < 2)
+                                                return;
+                                            if (!hop(cache, originalParentKey))
+                                                cache[originalParentKey] = {};
+                                            cache[originalParentKey][split[1]] = parent[key];
+                                            delete parent[key];
+                                        });
+                                        // Combine the local cache into the cachedChildren
+                                        if (_.keys(cache).length > 0) {
+                                            _.keys(cache).forEach(function(pop) {
+                                                if (!hop(cachedChildren, pop))
+                                                    cachedChildren[pop] = [];
+                                                cachedChildren[pop] = cachedChildren[pop].concat(cache[pop]);
+                                            });
+                                        }
+                                        next();
+                                    };
+
+                                    // Pull out any aliased child records that have come from a hasFK association
+                                    asynk.each(parentRecords, splitChildren).args(asynk.item, asynk.callback).parallel(function(err) {
+                                        if (err)
+                                            return next(err);
+                                        buffers.parents = parentRecords;
+                                        next();
+                                    }, [null]);
+
                                 });
-                                // Combine the local cache into the cachedChildren
-                                if (_.keys(cache).length > 0) {
-                                    _.keys(cache).forEach(function (pop) {
-                                        if (!hop(cachedChildren, pop))
-                                            cachedChildren[pop] = [];
-                                        cachedChildren[pop] = cachedChildren[pop].concat(cache[pop]);
-                                    });
-                                }
-                                next();
-                            };
-
-                            // Pull out any aliased child records that have come from a hasFK association
-                            asynk.each(parentRecords, splitChildren).args(asynk.item, asynk.callback).parallel(function (err) {
-                                if (err)
-                                    return next(err);
-                                buffers.parents = parentRecords;
-                                next();
-                            }, [null]);
-
-                        });
-                    }).args(asynk.callback)
+                            }).args(asynk.callback)
                             // Build child buffers.
                             // For each instruction, loop through the parent records and build up a
                             // buffer for the record.
-                            .add(function (next) {
-                                asynk.each(_.keys(instructions.instructions), function (population, nextPop) {
+                            .add(function(next) {
+                                asynk.each(_.keys(instructions.instructions), function(population, nextPop) {
                                     var populationObject = instructions.instructions[population];
                                     var popInstructions = populationObject.instructions;
                                     var pk = _getPK(connectionName, popInstructions[0].parent);
                                     var alias = populationObject.strategy.strategy === 1 ? popInstructions[0].parentKey : popInstructions[0].alias;
                                     // Use serie here to keep ordering
-                                    asynk.each(parentRecords, function (parent, nextParent) {
+                                    asynk.each(parentRecords, function(parent, nextParent) {
                                         var buffer = {
                                             attrName: population,
                                             parentPK: parent[pk],
@@ -1129,7 +1122,7 @@ module.exports = (function () {
                                         // Check for any cached parent records
                                         if (hop(cachedChildren, alias)) {
 
-                                            cachedChildren[alias].forEach(function (cachedChild) {
+                                            cachedChildren[alias].forEach(function(cachedChild) {
                                                 var childVal = popInstructions[0].childKey;
                                                 var parentVal = popInstructions[0].parentKey;
                                                 if (cachedChild[childVal] !== parent[parentVal]) {
@@ -1153,156 +1146,148 @@ module.exports = (function () {
                                 }).args(asynk.item, asynk.callback).parallel(next, [null]);
 
                             }).args(asynk.callback)
-                            .add(function (next) {
+                            .add(function(next) {
                                 // Remove the parent query
                                 _query.query.shift();
                                 var strategy3ChildCollection = null;
 
-                                asynk.each(_query.query, function (q, next) {
-                                    var childCollection = q.instructions.child;
-                                    var qs = '';
-                                    var pk;
-                                    var modelPk;
-                                    if (!Array.isArray(q.instructions)) {
-                                        pk = _getPK(connectionName, q.instructions.parent);
-                                        modelPk = _getModelPK(connectionName, q.instructions.parent, pk);
-                                        childCollection = q.instructions.child;
-                                    }
-                                    else if (q.instructions.length > 1) {
-                                        pk = _getPK(connectionName, q.instructions[0].parent);
-                                        modelPk = _getModelPK(connectionName, q.instructions[0].parent, pk);
-                                        childCollection = q.instructions[0].child;
-                                        strategy3ChildCollection = q.instructions[1].child;
-                                    }
-
-                                    var i = 0;
-                                    parentRecords.forEach(function (parent) {
-                                        var queryI;
-                                        if (_.isNumber(parent[modelPk])) {
-                                            queryI = q.qs.replace('^?^', parent[modelPk]);
-                                        } else {
-                                            queryI = q.qs.replace('^?^', '\'' + parent[modelPk] + '\'');
+                                asynk.each(_query.query, function(q, next) {
+                                        var childCollection = q.instructions.child;
+                                        var qs = '';
+                                        var pk;
+                                        var modelPk;
+                                        if (!Array.isArray(q.instructions)) {
+                                            pk = _getPK(connectionName, q.instructions.parent);
+                                            modelPk = _getModelPK(connectionName, q.instructions.parent, pk);
+                                            childCollection = q.instructions.child;
+                                        } else if (q.instructions.length > 1) {
+                                            pk = _getPK(connectionName, q.instructions[0].parent);
+                                            modelPk = _getModelPK(connectionName, q.instructions[0].parent, pk);
+                                            childCollection = q.instructions[0].child;
+                                            strategy3ChildCollection = q.instructions[1].child;
                                         }
-                                        queryI = queryI.trim();
-                                        var childCriteria = childCollection ? criterias[childCollection] : null;
-                                        var findQuery = queryI;
-                                        if (childCriteria) {
-                                            if (childCriteria.limit && childCriteria.skip) {// simple one to many populate
-                                                findQuery = '(SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + childCriteria.skip + ' and LINE_NUMBER <= ' + (childCriteria.skip + childCriteria.limit) + ')';
-                                            }
-                                            else if (childCriteria.limit) {
-                                                findQuery = '(SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER <= ' + childCriteria.limit + ')';
-                                            }
-                                            else if (childCriteria.skip) {
-                                                findQuery = '(SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + childCriteria.skip + ')';
+
+                                        var i = 0;
+                                        parentRecords.forEach(function(parent) {
+                                            var queryI;
+                                            if (_.isNumber(parent[modelPk])) {
+                                                queryI = q.qs.replace('^?^', parent[modelPk]);
                                             } else {
-                                                findQuery = 'SELECT * FROM ' + findQuery;
+                                                queryI = q.qs.replace('^?^', '\'' + parent[modelPk] + '\'');
                                             }
-                                        } else {// it's a strategy 3 populate, via join table
-                                            strategy3Criteria = criterias[strategy3ChildCollection];
-
-                                            if (strategy3Criteria.limit && strategy3Criteria.skip) {
-                                                findQuery = 'SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + strategy3Criteria.skip + ' and LINE_NUMBER <= ' + (strategy3Criteria.skip + strategy3Criteria.limit);
-                                            }
-                                            else if (strategy3Criteria.limit) {
-                                                findQuery = 'SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER <= ' + strategy3Criteria.limit;
-                                            }
-                                            else if (strategy3Criteria.skip) {
-                                                findQuery = 'SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + strategy3Criteria.skip;
-                                            }
-                                            else {
-                                                findQuery = 'SELECT * FROM ' + findQuery;
-                                            }
-                                        }
-                                        findQuery += ' UNION ';
-                                        qs += findQuery;
-                                        i++;
-                                    });
-
-                                    // Remove the last UNION
-                                    qs = qs.slice(0, -7);
-
-                                    execQuery(connections[connectionName], qs, [], function __FIND__(err, result) {
-                                        if (err) {
-                                            if (LOG_ERRORS) {
-                                                console.log("#Error populating '" + childCollection + "' collection in '" + collectionName + "' (Join) " + err.toString() + ".");
-                                            }
-                                            return next(err);
-                                        }
-                                        var groupedRecords = {};
-                                        result.forEach(function (row) {
-
-                                            if (!Array.isArray(q.instructions)) {
-                                                if (!hop(groupedRecords, row[q.instructions.childKey])) {
-                                                    groupedRecords[row[q.instructions.childKey]] = [];
+                                            queryI = queryI.trim();
+                                            var childCriteria = childCollection ? criterias[childCollection] : null;
+                                            var findQuery = queryI;
+                                            if (childCriteria) {
+                                                if (childCriteria.limit && childCriteria.skip) { // simple one to many populate
+                                                    findQuery = '(SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + childCriteria.skip + ' and LINE_NUMBER <= ' + (childCriteria.skip + childCriteria.limit) + ')';
+                                                } else if (childCriteria.limit) {
+                                                    findQuery = '(SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER <= ' + childCriteria.limit + ')';
+                                                } else if (childCriteria.skip) {
+                                                    findQuery = '(SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + childCriteria.skip + ')';
+                                                } else {
+                                                    findQuery = 'SELECT * FROM ' + findQuery;
                                                 }
-                                                groupedRecords[row[q.instructions.childKey]].push(row);
-                                            }
-                                            else {
+                                            } else { // it's a strategy 3 populate, via join table
+                                                strategy3Criteria = criterias[strategy3ChildCollection];
 
-                                                // Grab the special "foreign key" we attach and make sure to remove it
-                                                var fk = '___' + q.instructions[0].childKey;
-
-                                                if (!hop(groupedRecords, row[fk])) {
-                                                    groupedRecords[row[fk]] = [];
+                                                if (strategy3Criteria.limit && strategy3Criteria.skip) {
+                                                    findQuery = 'SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + strategy3Criteria.skip + ' and LINE_NUMBER <= ' + (strategy3Criteria.skip + strategy3Criteria.limit);
+                                                } else if (strategy3Criteria.limit) {
+                                                    findQuery = 'SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER <= ' + strategy3Criteria.limit;
+                                                } else if (strategy3Criteria.skip) {
+                                                    findQuery = 'SELECT * FROM ' + findQuery + ' WHERE LINE_NUMBER > ' + strategy3Criteria.skip;
+                                                } else {
+                                                    findQuery = 'SELECT * FROM ' + findQuery;
                                                 }
-
-                                                var data = _.clone(row);
-                                                delete data[fk];
-                                                groupedRecords[row[fk]].push(data);
                                             }
+                                            findQuery += ' UNION ';
+                                            qs += findQuery;
+                                            i++;
                                         });
 
-                                        buffers.store.forEach(function (buffer) {
+                                        // Remove the last UNION
+                                        qs = qs.slice(0, -7);
 
-                                            if (buffer.attrName !== q.attrName)
-                                                return;
-                                            var records = groupedRecords[buffer.belongsToPKValue];
-
-                                            if (!records)
-                                                return;
-                                            if (!buffer.records)
-                                                buffer.records = [];
-                                            var attrs;
-                                            if (strategy3ChildCollection) {// Child of a OneToMany relation Strategy 1
-                                                attrs = connections[connectionName].collections[strategy3ChildCollection].attributes;
+                                        execQuery(connections[connectionName], qs, [], function __FIND__(err, result) {
+                                            if (err) {
+                                                if (LOG_ERRORS) {
+                                                    console.log("#Error populating '" + childCollection + "' collection in '" + collectionName + "' (Join) " + err.toString() + ".");
+                                                }
+                                                return next(err);
                                             }
-                                            else {
-                                                attrs = connections[connectionName].collections[childCollection].attributes;
-                                            }
+                                            var groupedRecords = {};
+                                            result.forEach(function(row) {
 
-                                            records = processor.synchronizeResultWithModel(records, attrs);
-                                            buffer.records = buffer.records.concat(records);
-                                        });
-                                        next();
-                                    });
-                                }).args(asynk.item, asynk.callback)
-                                        .parallel(function (err) {
+                                                if (!Array.isArray(q.instructions)) {
+                                                    if (!hop(groupedRecords, row[q.instructions.childKey])) {
+                                                        groupedRecords[row[q.instructions.childKey]] = [];
+                                                    }
+                                                    groupedRecords[row[q.instructions.childKey]].push(row);
+                                                } else {
+
+                                                    // Grab the special "foreign key" we attach and make sure to remove it
+                                                    var fk = '___' + q.instructions[0].childKey;
+
+                                                    if (!hop(groupedRecords, row[fk])) {
+                                                        groupedRecords[row[fk]] = [];
+                                                    }
+
+                                                    var data = _.clone(row);
+                                                    delete data[fk];
+                                                    groupedRecords[row[fk]].push(data);
+                                                }
+                                            });
+
+                                            buffers.store.forEach(function(buffer) {
+
+                                                if (buffer.attrName !== q.attrName)
+                                                    return;
+                                                var records = groupedRecords[buffer.belongsToPKValue];
+
+                                                if (!records)
+                                                    return;
+                                                if (!buffer.records)
+                                                    buffer.records = [];
+                                                var attrs;
+                                                if (strategy3ChildCollection) { // Child of a OneToMany relation Strategy 1
+                                                    attrs = connections[connectionName].collections[strategy3ChildCollection].attributes;
+                                                } else {
+                                                    attrs = connections[connectionName].collections[childCollection].attributes;
+                                                }
+
+                                                records = processor.synchronizeResultWithModel(records, attrs);
+                                                buffer.records = buffer.records.concat(records);
+                                            });
                                             next();
                                         });
+                                    }).args(asynk.item, asynk.callback)
+                                    .parallel(function(err) {
+                                        next();
+                                    });
 
                             }).args(asynk.callback).serie(next);
-                }
+                    }
 
-            }, cb);
-        }
-        /*
-         **********************************************
-         * Optional overrides
-         **********************************************
-         
-         // Optional override of built-in batch create logic for increased efficiency
-         // otherwise, uses create()
-         createEach: function (collectionName, cb) { cb(); },
-         
-         // Optional override of built-in findOrCreate logic for increased efficiency
-         // otherwise, uses find() and create()
-         findOrCreate: function (collectionName, cb) { cb(); },
-         
-         // Optional override of built-in batch findOrCreate logic for increased efficiency
-         // otherwise, uses findOrCreate()
-         findOrCreateEach: function (collectionName, cb) { cb(); }
-         */
+                }, cb);
+            }
+            /*
+             **********************************************
+             * Optional overrides
+             **********************************************
+             
+             // Optional override of built-in batch create logic for increased efficiency
+             // otherwise, uses create()
+             createEach: function (collectionName, cb) { cb(); },
+             
+             // Optional override of built-in findOrCreate logic for increased efficiency
+             // otherwise, uses find() and create()
+             findOrCreate: function (collectionName, cb) { cb(); },
+             
+             // Optional override of built-in batch findOrCreate logic for increased efficiency
+             // otherwise, uses findOrCreate()
+             findOrCreateEach: function (collectionName, cb) { cb(); }
+             */
 
 
         /*
@@ -1379,19 +1364,19 @@ module.exports = (function () {
                 else
                     return false;
             }) || 'id';
-        }
-        catch (e) {
+        } catch (e) {
             throw new Error('Unable to determine primary key for collection `' + collectionIdentity + '` because ' +
-                    'an error was encountered acquiring the collection definition:\n' + require('util').inspect(e, false, null));
+                'an error was encountered acquiring the collection definition:\n' + require('util').inspect(e, false, null));
         }
     }
+
     function _getModelPK(connectionIdentity, collectionIdentity, pk) {
 
         var attributes;
         try {
             attributes = connections[connectionIdentity].collections[collectionIdentity].attributes;
             var modelPk;
-            Object.keys(attributes).forEach(function (key) {
+            Object.keys(attributes).forEach(function(key) {
                 var columnName = attributes[key].columnName || key;
                 if (columnName === pk) {
                     //if (columnName.toUpperCase() === pk) {    
@@ -1400,36 +1385,34 @@ module.exports = (function () {
                 return;
             });
             return modelPk;
-        }
-        catch (e) {
+        } catch (e) {
             throw new Error('Unable to determine model primary key for collection `' + collectionIdentity + '` because ' +
-                    'an error was encountered acquiring the collection definition:\n' + require('util').inspect(e, false, null));
+                'an error was encountered acquiring the collection definition:\n' + require('util').inspect(e, false, null));
         }
     }
 
     function _getColumnName(connectionIdentity, collectionIdentity, attr) {
 
-        var attributes;
-        try {
-            attributes = connections[connectionIdentity].collections[collectionIdentity].attributes;
-            var attribute = attributes[attr];
-            if (attribute) {
-                var columnName = attribute.columnName || attr;
-                return columnName.upperCase();
+            var attributes;
+            try {
+                attributes = connections[connectionIdentity].collections[collectionIdentity].attributes;
+                var attribute = attributes[attr];
+                if (attribute) {
+                    var columnName = attribute.columnName || attr;
+                    return columnName.upperCase();
+                }
+            } catch (e) {
+                throw new Error('Unable to determine model primary key for collection `' + collectionIdentity + '` because ' +
+                    'an error was encountered acquiring the collection definition:\n' + require('util').inspect(e, false, null));
             }
         }
-        catch (e) {
-            throw new Error('Unable to determine model primary key for collection `' + collectionIdentity + '` because ' +
-                    'an error was encountered acquiring the collection definition:\n' + require('util').inspect(e, false, null));
-        }
-    }
-    // Wrap a function in the logic necessary to provision a connection
-    // (either grab a free connection from the pool or create a new one)
-    // cb is optional (you might be streaming)
+        // Wrap a function in the logic necessary to provision a connection
+        // (either grab a free connection from the pool or create a new one)
+        // cb is optional (you might be streaming)
     function spawnConnection(logic, connection, cb) {
         var pool = connection.connection;
-        pool.acquire(function (err, cnx) {
-            logic(cnx, function (err, result) {
+        pool.acquire(function(err, cnx) {
+            logic(cnx, function(err, result) {
                 if (err) {
                     cb(err, 1);
                     if (LOG_ERRORS) {
@@ -1445,8 +1428,8 @@ module.exports = (function () {
 
     function execQuery(connection, query, data, cb) {
         var pool = connection.connection;
-        pool.acquire(function (err, cnx) {
-            cnx.execute(query, data, function (err, result) {
+        pool.acquire(function(err, cnx) {
+            cnx.execute(query, data, function(err, result) {
                 pool.release(cnx);
                 cb(err, result);
             });
@@ -1479,9 +1462,9 @@ module.exports = (function () {
                 formattedErr.code = 'E_UNIQUE';
                 formattedErr.invalidAttributes = {};
                 formattedErr.invalidAttributes[matches[2]] = [{
-                        value: matches[1],
-                        rule: 'unique'
-                    }];
+                    value: matches[1],
+                    rule: 'unique'
+                }];
             }
         }
 
@@ -1496,7 +1479,7 @@ module.exports = (function () {
     function fieldIsDatetime(column) {
         return (!_.isUndefined(column.type) && column.type === 'datetime');
     }
-    
+
     function fieldIsBinary(column) {
         return (!_.isUndefined(column.type) && column.type === 'binary');
     }
@@ -1504,17 +1487,10 @@ module.exports = (function () {
     function fieldIsAutoIncrement(column) {
         return (!_.isUndefined(column.autoIncrement) && column.autoIncrement);
     }
-    
-    function formatTimeZone(offset){
-        var str = Math.abs(offset);
-        if(Math.abs(offset)<10) str = '0'+str;
-        str = (offset>0)?'-'+str:str;
-        return str+':00';
-    }
-    
-    function closeConnectionPool(connectionName){
+
+    function closeConnectionPool(connectionName) {
         var pool = connections[connectionName].connection;
-        pool.drain(function () {
+        pool.drain(function() {
             pool.destroyAllNow();
         });
     }
