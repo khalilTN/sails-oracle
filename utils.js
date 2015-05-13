@@ -47,7 +47,7 @@ utils.parseUrl = function (config) {
 utils.prepareValue = function(value) {
 
   if(_.isUndefined(value) || value === null) return value;
-  if(Buffer.isBuffer(value)) return SqlString.escape(value.toString('hex'));
+  if(Buffer.isBuffer(value)) return value;
   // Cast functions to strings
   if (_.isFunction(value)) {
     value = value.toString();

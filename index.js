@@ -1,6 +1,6 @@
 var asynk = require('asynk');
 var _ = require('underscore');
-var oracle = require('oracle');
+var oracle = require('node-oracle');
 var sql = require('./lib/sql.js');
 var Query = require('./lib/query');
 var utils = require('./utils');
@@ -12,7 +12,6 @@ var hop = utils.object.hasOwnProperty;
 var SqlString = require('./lib/SqlString');
 var Errors = require('waterline-errors').adapter;
 var Pool = require('generic-pool');
-
 var LOG_QUERIES = true;
 var LOG_ERRORS = true;
 
@@ -90,7 +89,6 @@ module.exports = (function () {
                 return cb("Errors.IdentityMissing");
             if (connections[connection.identity])
                 return cb("Errors.IdentityDuplicate");
-
             var pool = Pool.Pool({
                 name: connection.identity,
                 create: function (callback) {
@@ -132,10 +130,24 @@ module.exports = (function () {
         // Optional hook fired when a model is unregistered, typically at server halt
         // useful for tearing down remaining open connections, etc.
         teardown: function (connectionName, cb) {
-            var pool = connections[connectionName].connection;
+            if (typeof connectionName == 'function') {
+                cb = connectionName;
+                connectionName = null;
+            }
+            if(!connectionName){
+                _.keys(connections).forEach(function(connectionName){
+                    closeConnectionPool(connectionName);
+                });
+                connections = {};
+                return cb();
+            }
+            if(!connections[connectionName]) return cb();
+            /*var pool = connections[connectionName].connection;
             pool.drain(function () {
                 pool.destroyAllNow();
-            });
+            });*/
+            closeConnectionPool(connectionName);
+            delete connections[connectionName];
             return cb();
         },
         // REQUIRED method if integrating with a schemaful database
@@ -147,7 +159,7 @@ module.exports = (function () {
             var connectionObject = connections[connectionName];
             var collection = connectionObject.collections[collectionName];
             if (!collection) {
-                return cb('Unknown collection `'+collectionName+'` in connection `'+connectionName+'`');
+                return cb('Unknown collection `' + collectionName + '` in connection `' + connectionName + '`');
             }
 
             var tableName = collectionName;
@@ -197,7 +209,6 @@ module.exports = (function () {
                             return cb(err);
                         }
                         if (result.length === 0) {/* Sequence Does Not Exist */
-                            console.log('Creating sequence', sequenceName);
                             var createSequenceQuery = 'create sequence ' + sequenceName + ' start with 1 increment by 1 maxvalue 999999999999';
                             if (LOG_QUERIES) {
                                 console.log('Executing DEFINE Sequence Creation query: ', createSequenceQuery);
@@ -209,13 +220,11 @@ module.exports = (function () {
                                     }
                                     return cb(err);
                                 }
-                                console.log('Sequence', sequenceName, 'created');
                                 self.describe(connectionName, collectionName, function (err) {
                                     cb(err, result);
                                 });
                             });
                         } else {
-                            console.log('Sequence', sequenceName, 'exists.');
                             self.describe(connectionName, collectionName, function (err) {
                                 cb(err, result);
                             });
@@ -247,7 +256,7 @@ module.exports = (function () {
             var collection = connectionObject.collections[collectionName];
 
             if (!collection) {
-                return cb('Unknown collection `'+collectionName+'` in connection `'+connectionName+'`');
+                return cb('Unknown collection `' + collectionName + '` in connection `' + connectionName + '`');
             }
 
             var tableName = collectionName;
@@ -397,7 +406,7 @@ module.exports = (function () {
 
             //var _insertData = lodash.cloneDeep(data);
             var _insertData = _.clone(data);
-
+            
             // Prepare values
             Object.keys(data).forEach(function (value) {
                 data[value] = utils.prepareValue(data[value]);
@@ -412,7 +421,7 @@ module.exports = (function () {
                 var column = definition[columnName];
 
                 if (fieldIsAutoIncrement(column)) {
-                    data[columnName] = SqlString.nextAutoIncrement('seq'+tableName);
+                    data[columnName] = SqlString.nextAutoIncrement('seq' + tableName);
                     if (column.hasOwnProperty('primaryKey')) {
                         autoIncPK = columnName;
                     }
@@ -426,6 +435,8 @@ module.exports = (function () {
                 }
                 else if (fieldIsBoolean(column)) {
                     data[columnName] = (data[columnName]) ? 1 : 0;
+                } else if (fieldIsBinary(column)) {
+                    data[columnName] = SqlString.lobField(data[columnName]);
                 }
             });
 
@@ -450,15 +461,15 @@ module.exports = (function () {
 
             var insertQuery = _query.query;
             var bindOutParam = [];
-            if(autoIncPK){
-                insertQuery += ' returning '+SqlString.escapeColumn(autoIncPK)+' into :1';
+            if (autoIncPK) {
+                insertQuery += ' returning ' + SqlString.escapeColumn(autoIncPK) + ' into :1';
                 bindOutParam.push(new oracle.OutParam());
             }
             // Run query
             if (LOG_QUERIES) {
                 console.log('Executing CREATE query: ' + insertQuery);
             }
-            
+
             execQuery(connections[connectionName], insertQuery, bindOutParam, function (err, result) {
                 if (err) {
                     if (LOG_ERRORS) {
@@ -510,20 +521,23 @@ module.exports = (function () {
             asynk.each(valuesList, function (data, cb) {
 
                 // Prepare values
-
+                
+                
                 Object.keys(data).forEach(function (value) {
                     data[value] = utils.prepareValue(data[value]);
                 });
-
-                var attributes = collection.attributes;
+                
                 var definition = collection.definition;
-                Object.keys(attributes).forEach(function (attributeName) {
-                    var attribute = attributes[attributeName];
-                    /* searching for column name, if it doesn't exist, we'll use attribute name */
-                    var columnName = attribute.columnName || attributeName;
+                var attributes = collection.attributes;
+                Object.keys(definition).forEach(function (columnName) {
+                    var attribute = definition[columnName];
+                    /* searching for attrbiute name */
+                    var attributeName = _.find(_.keys(attributes),function(attr){
+                        return attr === columnName || attributes[attr].columnName === columnName;
+                    });
                     /* affecting values to add to the columns */
                     data[columnName] = data[attributeName];
-                    /* deleting attributesto be added and their names are differnet from columns names */
+                    /* deleting attributes to be added and their names are differnet from columns names */
                     if (attributeName !== columnName)
                         delete data[attributeName];
                     /* deleting not mapped attributes */
@@ -531,9 +545,11 @@ module.exports = (function () {
                         delete data[columnName];
                     if (fieldIsDatetime(attribute)) {
                         data[columnName] = (!data[columnName]) ? 'null' : SqlString.dateField(data[columnName]);
+                    } else if (fieldIsBinary(attribute)) {
+                        data[columnName] = SqlString.lobField(data[columnName]);
                     }
                 });
-
+                //throw 'before sql';
                 var schema = collection.waterline.schema;
                 var _query;
 
@@ -553,7 +569,7 @@ module.exports = (function () {
                 execQuery(connections[connectionName], _query.query, [], function (err, results) {
                     if (err) {
                         if (LOG_ERRORS) {
-                            console.log("#Error executing Create (CreateEach) " + err.toString() + ".");
+                            console.log("#Error executing Create (CreateEach) " + err.toString() + ".\nCause",_query.query);
                         }
                         return cb(handleQueryError(err));
                     }
@@ -620,7 +636,13 @@ module.exports = (function () {
                 options.sort[PK] = 1;
             }
 
-
+            var jsonColumns = _.filter(_.keys(collection.attributes), function (attrName) {
+                var type = collection.attributes[attrName].type || collection.attributes[attrName];
+                return type === 'json';
+            });
+            jsonColumns = _.map(jsonColumns,function(col){
+                return collection.attributes[col].columnName || col;
+            });
             var limit = options.limit || null;
             var skip = options.skip || null;
             delete options.skip;
@@ -657,10 +679,17 @@ module.exports = (function () {
                     }
                     return cb(err);
                 }
-
-
+                if (jsonColumns && jsonColumns.length) {
+                    result = _.map(result, function (record) {
+                        jsonColumns.forEach(function (column) {
+                            if (record[column]) {
+                                record[column] = JSON.parse(record[column].replace(/\\/g, ''));
+                            }
+                        });
+                        return record;
+                    });
+                }
                 result = processor.synchronizeResultWithModel(result, collection.attributes);
-
                 cb(null, result);
             });
         },
@@ -1463,11 +1492,29 @@ module.exports = (function () {
     function fieldIsDatetime(column) {
         return (!_.isUndefined(column.type) && column.type === 'datetime');
     }
+    
+    function fieldIsBinary(column) {
+        return (!_.isUndefined(column.type) && column.type === 'binary');
+    }
 
     function fieldIsAutoIncrement(column) {
         return (!_.isUndefined(column.autoIncrement) && column.autoIncrement);
     }
-
     
+    function formatTimeZone(offset){
+        var str = Math.abs(offset);
+        if(Math.abs(offset)<10) str = '0'+str;
+        str = (offset>0)?'-'+str:str;
+        return str+':00';
+    }
+    
+    function closeConnectionPool(connectionName){
+        var pool = connections[connectionName].connection;
+        pool.drain(function () {
+            pool.destroyAllNow();
+        });
+    }
+
+
 
 })();
