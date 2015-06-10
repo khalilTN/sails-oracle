@@ -1174,9 +1174,9 @@ module.exports = (function() {
                                         parentRecords.forEach(function(parent) {
                                             var queryI;
                                             if (_.isNumber(parent[modelPk])) {
-                                                queryI = q.qs.replace('^?^', parent[modelPk]);
+                                                queryI = q.qs.replace(/\^\?\^/g, parent[modelPk]);
                                             } else {
-                                                queryI = q.qs.replace('^?^', '\'' + parent[modelPk] + '\'');
+                                                queryI = q.qs.replace(/\^\?\^/g, '\'' + parent[modelPk] + '\'');
                                             }
                                             queryI = queryI.trim();
                                             var childCriteria = childCollection ? criterias[childCollection] : null;
@@ -1212,6 +1212,7 @@ module.exports = (function() {
                                         // Remove the last UNION
                                         qs = qs.slice(0, -7);
 
+                                        if(LOG_QUERIES) console.log('JOIN Children :',qs);
                                         execQuery(connections[connectionName], qs, [], function __FIND__(err, result) {
                                             if (err) {
                                                 if (LOG_ERRORS) {
